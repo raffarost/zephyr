@@ -151,3 +151,7 @@
 &wifi {
 	status = "okay";
 };
+
+zephyr_uhc0: &usb_otg {
+	status = "disabled";
+};
