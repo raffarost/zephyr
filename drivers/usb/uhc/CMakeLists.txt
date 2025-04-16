@@ -4,5 +4,8 @@
 zephyr_library()
 
 zephyr_library_sources(uhc_common.c)
+zephyr_library_include_directories(${ZEPHYR_BASE}/drivers/usb/common/)
+
 zephyr_library_sources_ifdef(CONFIG_UHC_MAX3421E uhc_max3421e.c)
+zephyr_library_sources_ifdef(CONFIG_UHC_DWC2 ../common/usb_dwc2.c uhc_dwc2.c)
 zephyr_library_sources_ifdef(CONFIG_UHC_VIRTUAL uhc_virtual.c)

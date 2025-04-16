@@ -1,0 +1,27 @@
+# Copyright (c) 2025 Espressif Systems (Shanghai) Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
+
+config UHC_DWC2
+	bool "DWC2 USB host controller driver"
+	default y
+	depends on DT_HAS_SNPS_DWC2_ENABLED
+	select EVENTS
+	help
+	  DWC2 USB host controller driver.
+
+config UHC_DWC2_DMA
+	bool "DWC2 USB DMA support"
+	default y
+	depends on UHC_DWC2
+	help
+	  Enable Buffer DMA if DWC2 USB controller supports Internal DMA.
+
+if UHC_DWC2
+
+config UHC_DWC2_THREAD_STACK_SIZE
+	int "Driver internal thread stack size"
+	default 512
+	help
+	  Size of the stack used in the driver.
+
+endif
