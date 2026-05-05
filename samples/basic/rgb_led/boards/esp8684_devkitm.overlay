@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) 2024 Espressif Systems (Shanghai) Co., Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <zephyr/dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/pinctrl/esp32c2-pinctrl.h>
+
+/ {
+	pwm_leds: pwm_leds {
+		compatible = "pwm-leds";
+		status = "okay";
+
+		pwm_led_red: pwm_led_0 {
+			label = "Red PWM LED";
+			pwms = <&ledc0 0 PWM_HZ(100) PWM_POLARITY_NORMAL>;
+		};
+
+		pwm_led_green: pwm_led_1 {
+			label = "Green PWM LED";
+			pwms = <&ledc0 1 PWM_HZ(100) PWM_POLARITY_NORMAL>;
+		};
+
+		pwm_led_blue: pwm_led_2 {
+			label = "Blue PWM LED";
+			pwms = <&ledc0 2 PWM_HZ(100) PWM_POLARITY_NORMAL>;
+		};
+	};
+
+	aliases {
+		red-pwm-led = &pwm_led_red;
+		green-pwm-led = &pwm_led_green;
+		blue-pwm-led = &pwm_led_blue;
+	};
+};
+
+&pinctrl {
+	ledc0_default: ledc0_default {
+		group1 {
+			pinmux = <LEDC_CH0_GPIO0>,
+				 <LEDC_CH1_GPIO1>,
+				 <LEDC_CH2_GPIO8>;
+		};
+	};
+};
+
+&ledc0 {
+	pinctrl-0 = <&ledc0_default>;
+	pinctrl-names = "default";
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel0@0 {
+		reg = <0x0>;
+		timer = <0>;
+	};
+
+	channel1@1 {
+		reg = <0x1>;
+		timer = <0>;
+	};
+
+	channel2@2 {
+		reg = <0x2>;
+		timer = <0>;
+	};
+};
