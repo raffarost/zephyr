@@ -118,6 +118,29 @@ uint32_t i2s_esp32_get_source_clk_freq(i2s_clock_src_t clk_src)
 	return clk_freq;
 }
 
+/*
+ * True while at least one direction still has a transfer in flight. In full
+ * duplex the two directions share BCK/WS, so the peripheral must be considered
+ * active until both are done, whatever the driver state machine says.
+ */
+__maybe_unused static bool IRAM_ATTR i2s_esp32_hw_busy(const struct device *dev)
+{
+	const struct i2s_esp32_cfg *dev_cfg = dev->config;
+
+#if I2S_ESP32_IS_DIR_EN(rx)
+	if (dev_cfg->rx.data != NULL && dev_cfg->rx.data->transferring) {
+		return true;
+	}
+#endif
+#if I2S_ESP32_IS_DIR_EN(tx)
+	if (dev_cfg->tx.data != NULL && dev_cfg->tx.data->transferring) {
+		return true;
+	}
+#endif
+
+	return false;
+}
+
 static esp_err_t i2s_esp32_calculate_clock(const struct i2s_config *i2s_cfg, uint8_t channel_length,
 					   i2s_hal_clock_info_t *i2s_hal_clock_info)
 {
@@ -187,6 +210,26 @@ static void i2s_esp32_queue_drop(const struct device *dev, enum i2s_dir dir)
 
 static int i2s_esp32_restart_dma(const struct device *dev, enum i2s_dir dir);
 static int i2s_esp32_start_dma(const struct device *dev, enum i2s_dir dir);
+
+#if SOC_GDMA_SUPPORTED
+/*
+ * Clear I2S start bits only when no direction is still transferring.
+ * With peripheral domain PD, retained config must be in IDLE state so restore
+ * after sleep has a clean/working configuration.
+ */
+static void IRAM_ATTR i2s_esp32_stop_if_idle(const struct device *dev)
+{
+	const struct i2s_esp32_cfg *dev_cfg = dev->config;
+	const i2s_hal_context_t *hal = &dev_cfg->hal;
+
+	if (i2s_esp32_hw_busy(dev)) {
+		return;
+	}
+
+	i2s_hal_rx_stop(hal);
+	i2s_hal_tx_stop(hal);
+}
+#endif /* SOC_GDMA_SUPPORTED */
 
 #if I2S_ESP32_IS_DIR_EN(rx)
 
@@ -400,6 +443,9 @@ static void IRAM_ATTR i2s_esp32_rx_stop_transfer(const struct device *dev)
 	stream->data->mem_block_len = 0;
 
 	stream->data->transferring = false;
+#if SOC_GDMA_SUPPORTED
+	i2s_esp32_stop_if_idle(dev);
+#endif
 }
 
 #endif /* I2S_ESP32_IS_DIR_EN(rx) */
@@ -618,6 +664,9 @@ static void IRAM_ATTR i2s_esp32_tx_stop_transfer(const struct device *dev)
 	stream->data->mem_block_len = 0;
 
 	stream->data->transferring = false;
+#if SOC_GDMA_SUPPORTED
+	i2s_esp32_stop_if_idle(dev);
+#endif
 }
 
 #endif /* I2S_ESP32_IS_DIR_EN(tx) */
