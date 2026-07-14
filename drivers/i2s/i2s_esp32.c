@@ -324,6 +324,10 @@ static void IRAM_ATTR i2s_esp32_rx_callback(void *arg, int status)
 		goto rx_disable;
 	}
 
+	/* Ownership moved to the RX queue. */
+	stream->data->mem_block = NULL;
+	stream->data->mem_block_len = 0;
+
 	if (dev_data->state == I2S_STATE_STOPPING) {
 		if (dev_data->active_dir == I2S_DIR_RX ||
 		    (dev_data->active_dir == I2S_DIR_BOTH && !dev_cfg->tx.data->transferring)) {
@@ -439,9 +443,13 @@ static void IRAM_ATTR i2s_esp32_rx_stop_transfer(const struct device *dev)
 	i2s_hal_clear_intr_status(hal, I2S_INTR_MAX);
 #endif /* SOC_GDMA_SUPPORTED */
 
-	stream->data->mem_block = NULL;
-	stream->data->mem_block_len = 0;
+	if (stream->data->mem_block != NULL) {
+		k_mem_slab_free(stream->data->i2s_cfg.mem_slab, stream->data->mem_block);
+		stream->data->mem_block = NULL;
+		stream->data->mem_block_len = 0;
+	}
 
+	stream->data->dma_pending = false;
 	stream->data->transferring = false;
 #if SOC_GDMA_SUPPORTED
 	i2s_esp32_stop_if_idle(dev);
@@ -538,6 +546,8 @@ static void IRAM_ATTR i2s_esp32_tx_callback(void *arg, int status)
 	}
 
 	k_mem_slab_free(stream->data->i2s_cfg.mem_slab, stream->data->mem_block);
+	stream->data->mem_block = NULL;
+	stream->data->mem_block_len = 0;
 
 #if SOC_GDMA_SUPPORTED
 	if (status < 0) {
@@ -660,9 +670,13 @@ static void IRAM_ATTR i2s_esp32_tx_stop_transfer(const struct device *dev)
 	i2s_hal_clear_intr_status(hal, I2S_INTR_MAX);
 #endif /* SOC_GDMA_SUPPORTED */
 
-	stream->data->mem_block = NULL;
-	stream->data->mem_block_len = 0;
+	if (stream->data->mem_block != NULL) {
+		k_mem_slab_free(stream->data->i2s_cfg.mem_slab, stream->data->mem_block);
+		stream->data->mem_block = NULL;
+		stream->data->mem_block_len = 0;
+	}
 
+	stream->data->dma_pending = false;
 	stream->data->transferring = false;
 #if SOC_GDMA_SUPPORTED
 	i2s_esp32_stop_if_idle(dev);
@@ -1576,12 +1590,24 @@ static int i2s_esp32_trigger(const struct device *dev, enum i2s_dir dir, enum i2
 		}
 
 		key = irq_lock();
+#if I2S_ESP32_IS_DIR_EN(tx)
+		if (dir == I2S_DIR_TX || dir == I2S_DIR_BOTH) {
+			k_timer_stop(&dev_data->tx_deferred_transfer_timer);
+		}
+#endif
 		i2s_esp32_stop_transfer(dev, dir);
 		i2s_esp32_queue_drop(dev, dir);
 		dev_data->state = I2S_STATE_READY;
 		irq_unlock(key);
 		break;
 	case I2S_TRIGGER_PREPARE:
+		/* Stop DMA/I2S first; queue-only prepare leaves HW running. */
+#if I2S_ESP32_IS_DIR_EN(tx)
+		if (dir == I2S_DIR_TX || dir == I2S_DIR_BOTH) {
+			k_timer_stop(&dev_data->tx_deferred_transfer_timer);
+		}
+#endif
+		i2s_esp32_stop_transfer(dev, dir);
 		i2s_esp32_queue_drop(dev, dir);
 		dev_data->state = I2S_STATE_READY;
 		break;
